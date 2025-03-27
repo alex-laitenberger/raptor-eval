@@ -8,7 +8,15 @@ from scipy import spatial
 
 from .tree_structures import Node
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+import nltk
+# Check if the 'punkt' dataset is already downloaded
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    # Download the 'punkt' dataset if not present
+    nltk.download('punkt')
+
+#logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 
 def reverse_mapping(layer_to_nodes: Dict[int, List[Node]]) -> Dict[Node, int]:
@@ -34,10 +42,14 @@ def split_text(
     Returns:
         List[str]: A list of text chunks.
     """
+    # adjusted sentence split with NLTK:
+    sentences = nltk.tokenize.sent_tokenize(text)
+
+    # original sentence split method
     # Split the text into sentences using multiple delimiters
-    delimiters = [".", "!", "?", "\n"]
-    regex_pattern = "|".join(map(re.escape, delimiters))
-    sentences = re.split(regex_pattern, text)
+    # delimiters = [".", "!", "?", "\n"]
+    # regex_pattern = "|".join(map(re.escape, delimiters))
+    # sentences = re.split(regex_pattern, text)
     
     # Calculate the number of tokens for each sentence
     n_tokens = [len(tokenizer.encode(" " + sentence)) for sentence in sentences]
@@ -65,6 +77,28 @@ def split_text(
             sub_length = 0
             
             for sub_sentence, sub_token_count in zip(filtered_sub_sentences, sub_token_counts):
+                # -->> 1) Fallback if this sub-sentence is still bigger than max_tokens
+                if sub_token_count > max_tokens:
+                    words = sub_sentence.split()
+                    word_chunk = []
+                    word_length = 0
+                    
+                    for w in words:
+                        w_t = len(tokenizer.encode(" " + w))
+                        if word_length + w_t > max_tokens:
+                            chunks.append(" ".join(word_chunk))
+                            word_chunk = []
+                            word_length = 0
+                        word_chunk.append(w)
+                        word_length += w_t
+                    
+                    if word_chunk:
+                        chunks.append(" ".join(word_chunk))
+                    
+                    # Skip adding the sub_sentence to sub_chunk
+                    continue
+
+                # -->> 2) Existing logic for smaller sub-sentences
                 if sub_length + sub_token_count > max_tokens:
                     
                     # if the phrase does not have sub_sentences, it would create an empty chunk
@@ -206,3 +240,10 @@ def indices_of_nearest_neighbors_from_distances(distances: List[float]) -> np.nd
         np.ndarray: An array of indices sorted by ascending distance.
     """
     return np.argsort(distances)
+
+
+def buildMultipleChoiceQuestionText(questionString, options):
+            choicesString = ''
+            for index, option in enumerate(options):
+                 choicesString += f'[[{index+1}]]: {option} \n'
+            return f'{questionString} \nOptions: \n{choicesString}'

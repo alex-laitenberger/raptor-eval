@@ -3,31 +3,17 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Vim
-*.swp
-
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# mac
+# mac / cloud syncs
 .DS_Store
+.owncloudsync.log
 
-# Other
-.vscode
-*.tsv
-*.pt
-gpt*.txt
-*.env
-local/
-local_*
-build/
-*.egg-info/
-!/data/*.json
-/dist/
-checklist.md
-finetuning_ckpts/
-* copy*
-.idea
-assertion.log
-*.log
-*.db
+#config for api keys
+config.py
+
+# Ignore all files in experiments/
+/experiments/
+/nltk_data/
+/data/

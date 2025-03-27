@@ -1,8 +1,11 @@
 import logging
 import pickle
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
+from itertools import count, islice
 from typing import Dict, List, Set
+
+from openai import OpenAI
 
 from .cluster_utils import ClusteringAlgorithm, RAPTOR_Clustering
 from .tree_builder import TreeBuilder, TreeBuilderConfig
@@ -11,7 +14,7 @@ from .utils import (distances_from_embeddings, get_children, get_embeddings,
                     get_node_list, get_text,
                     indices_of_nearest_neighbors_from_distances, split_text)
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+#logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 
 class ClusterTreeConfig(TreeBuilderConfig):
@@ -57,11 +60,40 @@ class ClusterTreeBuilder(TreeBuilder):
         current_level_nodes: Dict[int, Node],
         all_tree_nodes: Dict[int, Node],
         layer_to_nodes: Dict[int, List[Node]],
-        use_multithreading: bool = False,
+        use_multithreading: bool = True,
     ) -> Dict[int, Node]:
-        logging.info("Using Cluster TreeBuilder")
+        # Helper Methods:
 
-        next_node_index = len(all_tree_nodes)
+        def get_next_index():
+            with counter_lock:
+                return next(next_node_index_counter)
+
+        def process_cluster_multithreaded(cluster, new_level_nodes, summarization_length, lock):
+            node_texts = get_text(cluster)
+
+            try:
+                summarized_text = self.summarize(
+                    context=node_texts,
+                    max_tokens=summarization_length
+                )
+            except Exception as e:
+                logging.error(f"Failed to summarize cluster: {e}")
+                raise e
+
+
+            # Safely get the next node index using the counter
+            next_node_index = get_next_index()
+
+            logging.info(
+                f"Index {next_node_index}, Node Texts Length: {len(self.tokenizer.encode(node_texts))}, Summarized Text Length: {len(self.tokenizer.encode(summarized_text))}"
+            )
+
+            __, new_parent_node = self.create_node(
+                next_node_index, summarized_text, {node.index for node in cluster}
+            )
+
+            with lock:
+                new_level_nodes[next_node_index] = new_parent_node
 
         def process_cluster(
             cluster, new_level_nodes, next_node_index, summarization_length, lock
@@ -74,7 +106,7 @@ class ClusterTreeBuilder(TreeBuilder):
             )
 
             logging.info(
-                f"Node Texts Length: {len(self.tokenizer.encode(node_texts))}, Summarized Text Length: {len(self.tokenizer.encode(summarized_text))}"
+                f"Index {next_node_index}, Node Texts Length: {len(self.tokenizer.encode(node_texts))}, Summarized Text Length: {len(self.tokenizer.encode(summarized_text))}"
             )
 
             __, new_parent_node = self.create_node(
@@ -83,6 +115,18 @@ class ClusterTreeBuilder(TreeBuilder):
 
             with lock:
                 new_level_nodes[next_node_index] = new_parent_node
+
+        # Helper methods end.
+
+
+        # construct_tree() start:
+        logging.info("Using Cluster TreeBuilder")
+
+        # Initialize a thread-safe counter starting at `new_node_index`
+        next_node_index = len(all_tree_nodes)
+        if use_multithreading:
+            next_node_index_counter = count(start=next_node_index)  # Start the counter at `new_node_index`
+            counter_lock = Lock()
 
         for layer in range(self.num_layers):
 
@@ -112,18 +156,37 @@ class ClusterTreeBuilder(TreeBuilder):
             logging.info(f"Summarization Length: {summarization_length}")
 
             if use_multithreading:
-                with ThreadPoolExecutor() as executor:
-                    for cluster in clusters:
-                        executor.submit(
-                            process_cluster,
-                            cluster,
-                            new_level_nodes,
-                            next_node_index,
-                            summarization_length,
-                            lock,
-                        )
-                        next_node_index += 1
-                    executor.shutdown(wait=True)
+                try:
+                    #with ThreadPoolExecutor(max_workers=5) as executor:
+                    with ThreadPoolExecutor() as executor:
+                        logging.info("Using multithreaded Summarization and Cluster processing")
+                        futures = [
+                            executor.submit(
+                                process_cluster_multithreaded,
+                                cluster,
+                                new_level_nodes,
+                                summarization_length,
+                                lock
+                            )
+                            for cluster in clusters
+                        ]
+
+                        for future in as_completed(futures):
+                            # check if a thread fails with exception
+                            exception = future.exception()
+                            if exception:
+                                logging.error(f"Error in cluster processing: {exception}")
+
+                                # Cancel remaining tasks
+                                for f in futures:
+                                    f.cancel()
+
+                                # Propagate the exception to stop processing
+                                raise exception
+
+                except Exception as e:
+                    logging.error(f"Aborting construct_tree due to error: {e}")
+                    raise e # propagates error and aborts construct_tree
 
             else:
                 for cluster in clusters:

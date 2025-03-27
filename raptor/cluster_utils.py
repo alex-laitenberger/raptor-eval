@@ -9,7 +9,7 @@ import umap
 from sklearn.mixture import GaussianMixture
 
 # Initialize logging
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+#logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 from .tree_structures import Node
 # Import necessary methods from other modules
@@ -137,7 +137,7 @@ class RAPTOR_Clustering(ClusteringAlgorithm):
         tokenizer=tiktoken.get_encoding("cl100k_base"),
         reduction_dimension: int = 10,
         threshold: float = 0.1,
-        verbose: bool = False,
+        verbose: bool = True,
     ) -> List[List[Node]]:
         # Get the embeddings from the nodes
         embeddings = np.array([node.embeddings[embedding_model_name] for node in nodes])

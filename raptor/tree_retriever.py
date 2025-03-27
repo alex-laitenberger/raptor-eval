@@ -13,7 +13,7 @@ from .utils import (distances_from_embeddings, get_children, get_embeddings,
                     indices_of_nearest_neighbors_from_distances,
                     reverse_mapping)
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+#logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 
 class TreeRetrieverConfig:

@@ -8,11 +8,12 @@ from .SummarizationModels import BaseSummarizationModel
 from .tree_builder import TreeBuilder, TreeBuilderConfig
 from .tree_retriever import TreeRetriever, TreeRetrieverConfig
 from .tree_structures import Node, Tree
+from .utils import buildMultipleChoiceQuestionText
 
 # Define a dictionary to map supported tree builders to their respective configs
 supported_tree_builders = {"cluster": (ClusterTreeBuilder, ClusterTreeConfig)}
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+#logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 
 class RetrievalAugmentationConfig:
@@ -263,6 +264,7 @@ class RetrievalAugmentation:
     def answer_question(
         self,
         question,
+        options = None, #in case of multiple choice
         top_k: int = 10,
         start_layer: int = None,
         num_layers: int = None,
@@ -286,17 +288,28 @@ class RetrievalAugmentation:
         Raises:
             ValueError: If the TreeRetriever instance has not been initialized.
         """
+        
+        #for MC baking the options into the retrievalQuestion:
+        retrievalQuestion = question
+        if options:
+            retrievalQuestion = buildMultipleChoiceQuestionText(question, options)
+
+
         # if return_layer_information:
         context, layer_information = self.retrieve(
-            question, start_layer, num_layers, top_k, max_tokens, collapse_tree, True
+            retrievalQuestion, start_layer, num_layers, top_k, max_tokens, collapse_tree, True
         )
 
-        answer = self.qa_model.answer_question(context, question)
+        tokenizer = self.tree_retriever_config.tokenizer
+        
+        answer, used_input_tokens = self.qa_model.answer_question(context, question, options, tokenizer)
+        
 
-        if return_layer_information:
-            return answer, layer_information
+        # if return_layer_information:
+        #     return answer, layer_information
 
-        return answer
+        return answer, layer_information, used_input_tokens
+
 
     def save(self, path):
         if self.tree is None:

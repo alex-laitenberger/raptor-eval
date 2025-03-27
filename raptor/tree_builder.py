@@ -18,7 +18,7 @@ from .utils import (distances_from_embeddings, get_children, get_embeddings,
                     get_node_list, get_text,
                     indices_of_nearest_neighbors_from_distances, split_text)
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+#logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 
 class TreeBuilderConfig:
